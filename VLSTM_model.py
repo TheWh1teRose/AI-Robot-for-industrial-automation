@@ -23,6 +23,5 @@ def get_path(image_width, image_height, image_depth, num_lable, batch_size, data
     with tf.variable_scope('lstm_layer') as scope:
         layer_flat = utills.flatten_layer3d(layer_conv2_pool, 7, name='flatten_layer')
         layer_lstm = utills.create_lstm_layer(layer_flat, lstm_size1, 7, num_lable, keep_prob, name='1_lstm_cells')
-        #pred = tf.nn.softmax(layer_lstm)
 
     return layer_lstm

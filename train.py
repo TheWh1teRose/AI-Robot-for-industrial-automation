@@ -33,19 +33,10 @@ for f in file:
         X = np.concatenate((X, data[0]))
         y = np.concatenate((y, data[1]))
 
-#normalize data
-x_min = X.min(axis=(1,2,3,4), keepdims=True)
-x_max = X.max(axis=(1,2,3,4), keepdims=True)
-X = (X - x_min)/(x_max - x_min)
-
-#X = X[:,:,:,:3]
-
 #split traindata in test and traiset
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=True)
-#helpercode
-def accuracy(predictions, labels):
-    return (100.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1)) / predictions.shape[0])
 
+#helpercode to get the mini-batches
 def getBatch(courent_batch_position, batch_size, X, y):
     if (courent_batch_position + batch_size) <= X_train.shape[0]:
         nextBatchPosition = (courent_batch_position+batch_size)
@@ -59,6 +50,7 @@ def getBatch(courent_batch_position, batch_size, X, y):
         courent_batch_position = overLapp
     return X_batch, y_batch, courent_batch_position
 
+#helpercode to get the kernals
 def put_kernels_on_grid (kernel, grid_Y, grid_X, pad=1):
       '''Visualize conv. features as an image (mostly for the 1st layer).
       Place kernel into a grid, with some paddings between adjacent filters.
@@ -113,7 +105,7 @@ num_epochs = 10000
 
 keep_probability = 0.5
 learning_rate_decay = 1e-9
-start_learning_rate = 5e-5
+start_learning_rate = 1e-5
 beta = 0.5
 
 
@@ -122,6 +114,7 @@ graph = tf.Graph()
 with graph.as_default():
     #define placeholders
     X = tf.placeholder(tf.float32, shape=[None, state_length, image_height, image_width, image_depth], name='X')
+    X_norm = tf.map_fn(lambda frame1: tf.map_fn(lambda frame2: tf.image.per_image_standardization(frame2), frame1), X)
     y = tf.placeholder(tf.float32, shape=[None, state_length, num_lable], name='y')
     y_cls = tf.argmax(y[:,-1], axis=1)
     #define keep propability for dropout
@@ -131,55 +124,73 @@ with graph.as_default():
     learning_rate = tf.train.exponential_decay(start_learning_rate, global_step, 1500, 0.97, staircase=True)
 
 
-    pred = model.get_path(image_width, image_height, image_depth, num_lable, batch_size, X, keep_probability)
+    pred = model.get_path(image_width, image_height, image_depth, num_lable, batch_size, X_norm, keep_prob)
 
     #predictions
-
     y_pred_cls = tf.argmax(pred, axis=1)
-    print(pred)
     cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=pred, labels=y[:,-1]))
-    regularizer = tf.nn.l2_loss(tf.get_collection('weights')[0]) + tf.nn.l2_loss(tf.get_collection('weights')[1]) + tf.nn.l2_loss(tf.get_collection('weights')[2])
+    #get l2 regularized value
+    regularizer = tf.nn.l2_loss(tf.get_collection('weights')[0]) + tf.nn.l2_loss(tf.get_collection('weights')[1])
     cost_reg = tf.reduce_mean(cost + beta * regularizer)
+    #optimize the error function
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost_reg, global_step=global_step)
+    #get accuracy
     correct_prediction = tf.equal(y_pred_cls, y_cls)
-    incorrect_images = tf.gather(X, tf.where(tf.not_equal(y_pred_cls, y_cls)))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    #get incorect classifyed images
+    incorrect_images = tf.gather(X, tf.where(tf.not_equal(y_pred_cls, y_cls)))
 
+    #put the kernal on a grid an save it to summary
     grid = put_kernels_on_grid (tf.get_collection('weights')[0][0,...], 4, 4)
     filter_summary = tf.summary.image('test/features', grid, max_outputs=1)
+    #save incorect classifyed images to summary
     image_summary = tf.summary.image('test/wronge', incorrect_images[:,0,6,...], max_outputs=20)
 
+    #save training stats to summary
     train_acc = tf.summary.scalar('Accuracy_train', accuracy)
     train_loss = tf.summary.scalar('loss/cost', cost)
     learning_rate_summary = tf.summary.scalar('learning_rate', learning_rate)
 
+    #merge and save op
     merged = tf.summary.merge_all()
     saver = tf.train.Saver()
 
 with tf.Session(graph=graph) as session:
     tf.global_variables_initializer().run()
+    #saver for the train and test summary
     train_writer = tf.summary.FileWriter('statistics/train/summ_Modell{}'.format("Test"), session.graph)
     test_writer = tf.summary.FileWriter('statistics/test/summ_Modell{}'.format("Test"))
-    total_epochs = 1
+
     courent_batch_position = 0
     last_best_acc = 0
 
-    for i in range(num_epochs):
-        if len(X_train)/batch_size % math.ceil(total_epochs) == 0:
+    #train loop
+    for total_epochs in range(num_epochs):
+        #shuffle data after when every image is seen
+        if len(X_train)/batch_size % math.ceil(total_epochs+1) == 0:
             X_train, _, y_train, _ = train_test_split(X_train, y_train, test_size=0, shuffle=True)
+        #save summary, save model and print stats to consol
         if total_epochs % 100 == 0:
+            #get test summary, courent learning rate und test acc
             summary_train, learning_rate_res, acc_train = session.run([merged, learning_rate, accuracy], feed_dict={X: X_train, y: y_train, keep_prob: 1})
+            #wite test summary
             train_writer.add_summary(summary_train, total_epochs)
+            #get train summary und train acc
             summary_test, acc_test = session.run([merged, accuracy], feed_dict={X: X_test, y: y_test, keep_prob: 1})
+            #write train summary
             test_writer.add_summary(summary_test, total_epochs)
+            #print train stats to consol
             print('epoch: {}, Train Acc: {}, Test Acc: {}, Learning rate: {}'.format(total_epochs, acc_train, acc_test, learning_rate_res))
+            #save model if it is better then the last saved model
             if last_best_acc < acc_test:
                 save_path = saver.save(session, "ckpts/model_acc{}/model_acc{}.ckpt".format(int(round(acc_test*100)), int(round(acc_test*100))))
                 print('Model saved in path: {}'.format(save_path))
                 last_best_acc = acc_test
 
-
+        ###train step###
+        #get the courent mini-batch
         X_batch, y_batch, courent_batch_position = getBatch(courent_batch_position, batch_size, X_train, y_train)
+        #train model and get the cost value and the l2 reg term
         _, cost_er, reg = session.run([optimizer, cost, regularizer], feed_dict={X: X_batch, y: y_batch, keep_prob: keep_probability})
         print('Epoch: {}, COst: {}, L2 Reg: {}'.format(total_epochs, cost_er, reg), end='\r')
         total_epochs += 1

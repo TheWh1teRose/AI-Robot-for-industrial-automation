@@ -29,6 +29,7 @@ def create_conv_layer(input, num_input_channels, filter_size, num_filters, name=
 
 		return layer, weights
 
+#create an 3d convolutional layer
 def create_conv3d_layer(input, batch, num_input_channels, filter_size, num_filters, name=None, cnn_stride=1):
 	with tf.variable_scope(name) as scope:
 		shape = [batch, filter_size, filter_size, num_input_channels, num_filters]
@@ -54,22 +55,6 @@ def to_sequence(input, batch):
 	output = []
 	for i in range(batch):
 		output.append(input[:,i,...])
-	return output
-
-def create_time_conv_layer(input, batch, num_input_channels, filter_size, num_filters, name=None, cnn_stride=1):
-	output = []
-	out_weights = []
-	for ele in input:
-		tmp, weights = create_conv_layer(ele, num_input_channels, filter_size, num_filters, name, cnn_stride)
-		output.append(tmp)
-		out_weights.append(weights)
-	return output, out_weights
-
-def create_time_pooling(input, batch, pool_ksize=2, pool_stride=2, name=None):
-	output = []
-	for ele in input:
-		tmp = pooling(ele, pool_ksize, pool_stride, name)
-		output.append(tmp)
 	return output
 
 #create an fully connected layer
@@ -120,16 +105,11 @@ def dropout(input, keep_prob=0.5, name=None):
 def pooling(input, pool_ksize=2, pool_stride=2, name=None):
 	return tf.nn.max_pool(input, [1, pool_ksize, pool_ksize, 1], [1, pool_stride, pool_stride, 1], padding='SAME', name=name)
 
+#create 3d pooling layer
 def pooling3d(input, batch, pool_ksize=2, pool_stride=2, name=None):
 	return tf.nn.max_pool3d(input, [1, 1, pool_ksize, pool_ksize, 1], [1, 1, pool_stride, pool_stride, 1], padding='SAME', name=name)
 
-def time_flatten_layer(input, batch, name=None):
-	output = []
-	for ele in input:
-		tmp, num_features = flatten_layer(ele, name)
-		output.append(tmp)
-	return output
-
+#flatt the output of an 3d convolutional layer
 def flatten_layer3d(layer, batch, name=None):
 	with tf.variable_scope(name) as scope:
 		layer_shape = layer.get_shape()
@@ -145,9 +125,3 @@ def flatten_layer(layer, name=None):
 		num_features = layer_shape[1:4].num_elements()
 		layer_flat = tf.reshape(layer, [-1, num_features])
 		return layer_flat, num_features
-
-def length(sequence):
-  used = tf.sign(tf.reduce_max(tf.abs(sequence), 2))
-  length = tf.reduce_sum(used, 1)
-  length = tf.cast(length, tf.int32)
-  return length
