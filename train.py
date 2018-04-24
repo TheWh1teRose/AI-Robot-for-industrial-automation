@@ -13,8 +13,9 @@ import math
 from tensorflow.python import debug as tf_debug
 
 #path to traindata
-path = 'F:/Dokumente/Programmieren/RoboPen/UnitySimulation/AIRobot_Simulation/DataProcessing/traindata/pre/Data_30x30/diff2/*'
+path = 'F:/Dokumente/Programmieren/RoboPen/UnitySimulation/AIRobot_Simulation/DataProcessing/traindata/pre/Data_30x30/diff3_keepLenght14/*'
 file = glob.glob(path)
+modelName = 'diff3_64LSTM'
 data = None
 print(file)
 
@@ -98,7 +99,7 @@ def put_kernels_on_grid (kernel, grid_Y, grid_X, pad=1):
 image_width = 30
 image_height = 30
 image_depth = 3
-state_length = 7
+keep_lenght = 14
 num_lable = 8
 batch_size = 265
 num_epochs = 10000
@@ -113,9 +114,9 @@ beta = 0.5
 graph = tf.Graph()
 with graph.as_default():
     #define placeholders
-    X = tf.placeholder(tf.float32, shape=[None, state_length, image_height, image_width, image_depth], name='X')
+    X = tf.placeholder(tf.float32, shape=[None, keep_lenght, image_height, image_width, image_depth], name='X')
     X_norm = tf.map_fn(lambda frame1: tf.map_fn(lambda frame2: tf.image.per_image_standardization(frame2), frame1), X)
-    y = tf.placeholder(tf.float32, shape=[None, state_length, num_lable], name='y')
+    y = tf.placeholder(tf.float32, shape=[None, keep_lenght, num_lable], name='y')
     y_cls = tf.argmax(y[:,-1], axis=1)
     #define keep propability for dropout
     keep_prob = tf.placeholder(tf.float32, name='keep_prob')
@@ -124,7 +125,7 @@ with graph.as_default():
     learning_rate = tf.train.exponential_decay(start_learning_rate, global_step, 1500, 0.97, staircase=True)
 
 
-    pred = model.get_path(image_width, image_height, image_depth, num_lable, batch_size, X_norm, keep_prob)
+    pred = model.get_path(image_width, image_height, image_depth, keep_lenght, num_lable, batch_size, X_norm, keep_prob)
 
     #predictions
     y_pred_cls = tf.argmax(pred, axis=1)
@@ -141,7 +142,7 @@ with graph.as_default():
     incorrect_images = tf.gather(X, tf.where(tf.not_equal(y_pred_cls, y_cls)))
 
     #put the kernal on a grid an save it to summary
-    grid = put_kernels_on_grid (tf.get_collection('weights')[0][0,...], 4, 4)
+    grid = put_kernels_on_grid (tf.get_collection('weights')[0][0,...], 4, 2)
     filter_summary = tf.summary.image('test/features', grid, max_outputs=1)
     #save incorect classifyed images to summary
     image_summary = tf.summary.image('test/wronge', incorrect_images[:,0,6,...], max_outputs=20)
@@ -158,8 +159,8 @@ with graph.as_default():
 with tf.Session(graph=graph) as session:
     tf.global_variables_initializer().run()
     #saver for the train and test summary
-    train_writer = tf.summary.FileWriter('statistics/train/summ_Modell{}'.format("Test"), session.graph)
-    test_writer = tf.summary.FileWriter('statistics/test/summ_Modell{}'.format("Test"))
+    train_writer = tf.summary.FileWriter('statistics/{}/train/summ_Modell'.format(modelName), session.graph)
+    test_writer = tf.summary.FileWriter('statistics/{}/test/summ_Modell'.format(modelName))
 
     courent_batch_position = 0
     last_best_acc = 0
@@ -183,7 +184,9 @@ with tf.Session(graph=graph) as session:
             print('epoch: {}, Train Acc: {}, Test Acc: {}, Learning rate: {}'.format(total_epochs, acc_train, acc_test, learning_rate_res))
             #save model if it is better then the last saved model
             if last_best_acc < acc_test:
-                save_path = saver.save(session, "ckpts/model_acc{}/model_acc{}.ckpt".format(int(round(acc_test*100)), int(round(acc_test*100))))
+                if not os.path.exists('ckpts/{}/'.format(modelName)):
+                    os.makedirs('ckpts/{}/'.format(modelName))
+                save_path = saver.save(session, "ckpts/{}/model_acc{}/model_acc{}.ckpt".format(modelName, int(round(acc_test*100)), int(round(acc_test*100))))
                 print('Model saved in path: {}'.format(save_path))
                 last_best_acc = acc_test
 

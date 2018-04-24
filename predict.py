@@ -68,7 +68,7 @@ frames = None
 lastTime = time.time()
 with tf.Session(graph=graph) as sess:
 	#restore model
-	saver.restore(sess, "ckpts/model_acc91/model_acc91.ckpt")
+	saver.restore(sess, "ckpts/combi2n3/model_acc90/model_acc90.ckpt")
 	while True:
 		#wait until the take time is over
 		yet = time.time()
