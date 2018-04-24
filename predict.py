@@ -47,7 +47,7 @@ with graph.as_default():
 	X_norm = tf.map_fn(lambda frame1: tf.map_fn(lambda frame2: tf.image.per_image_standardization(frame2), frame1), X)
 
 	#make the prediction
-	pred = model.get_path(image_width, image_height, image_depth, num_lable, 1, X_norm, 1)
+	pred = model.get_path(image_width, image_height, image_depth, state_length, num_lable, 1, X_norm, 1)
 	pred_softmax = tf.nn.softmax(pred)
 	y_pred_cls = tf.argmax(pred_softmax, axis=1)
 
@@ -68,7 +68,7 @@ frames = None
 lastTime = time.time()
 with tf.Session(graph=graph) as sess:
 	#restore model
-	saver.restore(sess, "ckpts/combi2n3/model_acc90/model_acc90.ckpt")
+	saver.restore(sess, "ckpts/model_acc91/model_acc91.ckpt")
 	while True:
 		#wait until the take time is over
 		yet = time.time()
@@ -90,7 +90,7 @@ with tf.Session(graph=graph) as sess:
 
 		#initialize frame
 		if frames is None:
-			frames = np.zeros((1,7,30,30,3), dtype=np.float32)
+			frames = np.zeros((1,state_length,30,30,3), dtype=np.float32)
 
 		#gemerate frame series
 		#delete last frame

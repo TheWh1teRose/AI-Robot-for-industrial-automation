@@ -5,7 +5,7 @@ import LayerUtills as utills
 def get_path(image_width, image_height, image_depth, keep_lenght, num_lable, batch_size, data, keep_prob):
     #architecture
     filter_size1 = 11
-    num_filters1 = 8
+    num_filters1 = 16
     #maxpool
     filter_size2 = 3
     num_filters2 = 32
